@@ -38,26 +38,49 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build with Gradle (verbose)
-        run: ./gradlew clean build assembleRelease assembleDebug -v --stacktrace
-
-      - name: List build outputs
+      - name: Check project structure
         run: |
-          find app/build -name "*.apk" -type f
-          ls -la app/build/outputs/ || echo "No outputs directory"
+          echo "=== Directory Structure ==="
+          ls -la
+          echo ""
+          echo "=== App Directory ==="
+          ls -la app/
+          echo ""
+          echo "=== Gradle Version ==="
+          ./gradlew --version
 
-      - name: Upload APKs to artifacts
-        uses: actions/upload-artifact@v4
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug -v 2>&1 | tee build_debug.log
+
+      - name: Build Release APK
+        run: ./gradlew assembleRelease -v 2>&1 | tee build_release.log
+
+      - name: Check build outputs
+        run: |
+          echo "=== Looking for APKs ==="
+          find . -name "*.apk" -type f
+          echo ""
+          echo "=== App Build Directory ==="
+          ls -la app/build/ || echo "No build directory"
+          echo ""
+          echo "=== Full outputs directory ==="
+          find app/build/outputs -type f 2>/dev/null | head -20 || echo "No outputs found"
+
+      - name: Upload build logs
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build_debug.log
+            build_release.log
+
+      - name: Upload APKs (if found)
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: apks
-          path: app/build/outputs/apk/**/
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
           if-no-files-found: warn
-
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: app/build/outputs/apk/**/*.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
