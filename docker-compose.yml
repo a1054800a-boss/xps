@@ -1,0 +1,1 @@
+version: '3.8'\n\nservices:\n  xspoof-builder:\n    build: .\n    image: xspoof-builder:latest\n    container_name: xspoof-build-env\n    volumes:\n      - .:/workspace\n    working_dir: /workspace\n    stdin_open: true\n    tty: true\n    command: /bin/bash\n"
