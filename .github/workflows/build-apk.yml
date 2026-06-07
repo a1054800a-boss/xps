@@ -35,25 +35,25 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build APK using build script
-        run: |
-          chmod +x build.sh
-          ./build.sh
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
 
-      - name: Upload APKs
+      - name: Build APK with EAS
+        run: eas build -p android --local --output=./app.apk
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: apks
-          path: |
-            **/*.apk
-            dist/
+          name: apk
+          path: ./app.apk
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            **/*.apk
+          files: ./app.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
