@@ -18,10 +18,10 @@ Open Termux and run these commands:
 
 ```bash
 # Update package manager
-pkg update && pkg upgrade
+pkg update && pkg upgrade -y
 
 # Install essential tools
-pkg install -y git openjdk-17 gradle wget curl
+pkg install -y git openjdk-17 gradle android-tools zip make
 
 # Verify installations
 java -version
@@ -49,25 +49,13 @@ cd xps
 
 # Switch to magisk-conversion branch
 git checkout magisk-conversion
+
+# Verify you're on correct branch
+git branch
+# Should show: * magisk-conversion
 ```
 
-## Step 3: Configure Android SDK
-
-```bash
-# Install Android SDK tools
-pkg install -y android-tools
-
-# Set ANDROID_SDK_ROOT (add to ~/.bashrc for persistence)
-export ANDROID_SDK_ROOT=$PREFIX/opt/android-sdk
-export ANDROID_HOME=$ANDROID_SDK_ROOT
-
-# Add to bashrc for future sessions
-echo "export ANDROID_SDK_ROOT=\$PREFIX/opt/android-sdk" >> ~/.bashrc
-echo "export ANDROID_HOME=\$ANDROID_SDK_ROOT" >> ~/.bashrc
-source ~/.bashrc
-```
-
-## Step 4: Set Gradle Properties
+## Step 3: Configure Gradle for Termux
 
 Create `~/.gradle/gradle.properties`:
 
@@ -79,52 +67,91 @@ org.gradle.parallel=true
 org.gradle.daemon=false
 android.useAndroidX=true
 android.enableJetifier=true
+org.gradle.warning.mode=all
 EOF
 ```
 
-## Step 5: Build the APK
+## Step 4: Set Environment Variables
+
+```bash
+# Set Java home
+export JAVA_HOME=$PREFIX/opt/openjdk
+export PATH=$JAVA_HOME/bin:$PATH
+
+# Verify
+java -version
+```
+
+## Step 5: Create gradlew Script (IMPORTANT!)
+
+The project doesn't have `gradlew`, so we need to create it:
 
 ```bash
 cd ~/projects/xps
 
-# Make build scripts executable
-chmod +x ./gradlew
+# Create gradlew script
+cat > gradlew << 'EOF'
+#!/bin/bash
+gradle "$@"
+EOF
 
-# Clean build
-./gradlew clean
+# Make it executable
+chmod +x gradlew
 
-# Build release APK (this takes ~5-10 minutes)
-./gradlew assembleRelease -x lint
+# Verify
+ls -la gradlew
 ```
 
-**Check progress in output:**
-```
-> Task :app:packageReleaseResources
-> Task :app:compileReleaseKotlin
-> Task :app:dexReleaseClasses
-> Task :app:packageRelease
-> Task :app:signReleaseApk
-```
-
-### APK Location
-```
-~/projects/xps/app/build/outputs/apk/release/app-release.apk
-```
-
-**File size:** ~5-8 MB
-
-## Step 6: Create Magisk Module ZIP
+## Step 6: Build the APK
 
 ```bash
 cd ~/projects/xps
 
-# Navigate to magisk module directory
-cd magisk_module
+# First, clean any previous builds
+rm -rf app/build
 
-# Create the ZIP file
+# Build release APK (takes 5-15 minutes depending on phone)
+./gradlew assembleRelease -x lint --no-daemon
+
+# Monitor the build:
+# - Resolving dependencies
+# - Compiling Kotlin
+# - Building APK
+# - Signing APK
+```
+
+**Watch for this line:**
+```
+BUILD SUCCESSFUL in Xm Ys
+```
+
+### If Build Fails:
+
+```bash
+# Try with reduced memory
+./gradlew assembleRelease -x lint --no-daemon -Dorg.gradle.jvmargs="-Xmx512m"
+
+# Or enable verbose output to see error
+./gradlew assembleRelease -x lint --no-daemon --stacktrace
+```
+
+### APK Location After Build
+```bash
+# Check if APK was created
+ls -lah app/build/outputs/apk/release/app-release.apk
+
+# Should show: app-release.apk (~5-8 MB)
+```
+
+## Step 7: Create Magisk Module ZIP
+
+```bash
+cd ~/projects/xps/magisk_module
+
+# Create proper ZIP structure
 zip -r ../XSpoof-Magisk-v2.0.0.zip \
     module.prop \
-    common/system.prop \
+    common/ \
     post-fs-data.sh \
     service.sh \
     uninstall.sh \
@@ -133,39 +160,51 @@ zip -r ../XSpoof-Magisk-v2.0.0.zip \
 # Verify ZIP was created
 cd ..
 ls -lah XSpoof-Magisk-v2.0.0.zip
+
+# Verify ZIP contents
+unzip -l XSpoof-Magisk-v2.0.0.zip
 ```
 
 **Expected output:**
 ```
--rw-r--r-- 1 user group 12K Jun 9 20:50 XSpoof-Magisk-v2.0.0.zip
+Archive:  XSpoof-Magisk-v2.0.0.zip
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+      xxx  06-09-2026 12:00   module.prop
+      xxx  06-09-2026 12:00   common/system.prop
+      xxx  06-09-2026 12:00   post-fs-data.sh
+      xxx  06-09-2026 12:00   service.sh
+      xxx  06-09-2026 12:00   uninstall.sh
+      xxx  06-09-2026 12:00   README.md
 ```
 
-## Step 7: Copy Files for Installation
-
-### Option A: Using File Manager
+## Step 8: Copy Files to Downloads
 
 ```bash
-# Copy to Downloads folder (accessible via file manager)
-cp ~/projects/xps/app/build/outputs/apk/release/app-release.apk ~/storage/downloads/XSpoof-v2.0.0.apk
-cp ~/projects/xps/XSpoof-Magisk-v2.0.0.zip ~/storage/downloads/XSpoof-Magisk-v2.0.0.zip
+# Ensure storage directory is accessible
+ls ~/storage/downloads/
 
-# Verify
-ls ~/storage/downloads/ | grep XSpoof
+# Copy APK
+if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+    cp app/build/outputs/apk/release/app-release.apk ~/storage/downloads/XSpoof-v2.0.0.apk
+    echo "✅ APK copied"
+else
+    echo "❌ APK not found - build may have failed"
+fi
+
+# Copy Magisk ZIP
+if [ -f XSpoof-Magisk-v2.0.0.zip ]; then
+    cp XSpoof-Magisk-v2.0.0.zip ~/storage/downloads/XSpoof-Magisk-v2.0.0.zip
+    echo "✅ Magisk module copied"
+else
+    echo "❌ ZIP not found"
+fi
+
+# Verify files
+ls -lah ~/storage/downloads/XSpoof*
 ```
 
-### Option B: Direct Installation via ADB (if connected to PC)
-
-```bash
-# If you have adb available in Termux
-adb devices
-
-# Install APK
-adb install ~/projects/xps/app/build/outputs/apk/release/app-release.apk
-
-# Or manually transfer files via USB
-```
-
-## Step 8: Install on Your Device
+## Step 9: Install on Your Device
 
 ### Install the APK
 
@@ -176,26 +215,27 @@ adb install ~/projects/xps/app/build/outputs/apk/release/app-release.apk
 4. Tap to install
 5. Allow installation from unknown sources if prompted
 
-**Method 2: Using Termux**
+**Method 2: Using Termux (if you have GUI)**
 ```bash
-# If termux-open is available
+# Open in file manager
 termux-open ~/storage/downloads/XSpoof-v2.0.0.apk
 ```
 
 ### Install the Magisk Module
 
 1. **Open Magisk Manager**
-2. **Tap "Modules"**
-3. **Tap the "+" button** (or "Install from Storage")
-4. **Select** `XSpoof-Magisk-v2.0.0.zip`
-5. **Wait for installation** to complete
-6. **Reboot device**
+2. **Go to "Modules" tab**
+3. **Tap the "+" button** (or "Install from file")
+4. **Navigate to** `~/storage/downloads/`
+5. **Select** `XSpoof-Magisk-v2.0.0.zip`
+6. **Wait for installation** (should say "Installation Successful")
+7. **Reboot device**
 
-## Step 9: Verify Installation
+## Step 10: Verify Installation
 
 ### Check if APK is installed
 ```bash
-# List installed packages
+# List all packages with xspoof
 pm list packages | grep xspoof
 
 # Expected output:
@@ -204,10 +244,10 @@ pm list packages | grep xspoof
 
 ### Check Xposed logs
 ```bash
-# View recent logs
+# View logs
 logcat | grep XSpoof
 
-# Or save to file
+# Save logs to file
 logcat > ~/xspoof_logs.txt
 ```
 
@@ -219,60 +259,100 @@ am start -n com.example.xspoof/.ui.MainActivity
 
 ## Troubleshooting
 
+### Error: `bash: ./gradlew: No such file or directory`
+
+**Solution:** Create the gradlew script:
+```bash
+cd ~/projects/xps
+cat > gradlew << 'EOF'
+#!/bin/bash
+gradle "$@"
+EOF
+chmod +x gradlew
+```
+
+### Error: `The program zip is not installed`
+
+**Solution:** Install zip:
+```bash
+pkg install -y zip
+```
+
+### Error: `Cannot stat 'app/build/outputs/apk/release/app-release.apk'`
+
+This means the build failed. Check:
+```bash
+# Check for build errors
+cat app/build.log
+
+# Look for actual outputs
+find app/build -name "*.apk" 2>/dev/null
+
+# Try rebuilding with verbose output
+./gradlew assembleRelease --stacktrace
+```
+
 ### Build Fails with "SDK not found"
 
 ```bash
-# Manually set SDK
-export ANDROID_SDK_ROOT=$PREFIX/opt/android-sdk
-export ANDROID_HOME=$ANDROID_SDK_ROOT
+# Check Java is set correctly
+echo $JAVA_HOME
+java -version
 
-# Try again
-./gradlew assembleRelease -x lint
+# If not set:
+export JAVA_HOME=$PREFIX/opt/openjdk
 ```
 
 ### Out of Memory Error
 
 ```bash
-# Increase heap size
-export GRADLE_OPTS="-Xmx512m"
-./gradlew assembleRelease -x lint
+# Reduce heap
+export GRADLE_OPTS="-Xmx256m"
+./gradlew assembleRelease -x lint --no-daemon
 ```
 
 ### Gradle Daemon Issues
 
 ```bash
-# Kill gradle daemon
+# Stop daemon
 ./gradlew --stop
 
-# Clean and rebuild
-./gradlew clean assembleRelease
+# Verify it's stopped
+ps aux | grep gradle
+
+# Try build without daemon
+./gradlew assembleRelease -x lint --no-daemon
 ```
 
-### APK Installation Fails
+### Build Hangs
 
+**Wait 10-15 minutes** - first build takes longer. If still hanging:
 ```bash
-# Verify APK signature
-jarsigner -verify app/build/outputs/apk/release/app-release.apk
+# Press Ctrl+C to stop
+# Kill any gradle processes
+pkill -f gradle
 
-# Check file integrity
-ls -lah app/build/outputs/apk/release/app-release.apk
+# Try again with no-daemon
+./gradlew assembleRelease -x lint --no-daemon
 ```
 
-### Module ZIP Not Installing
+### ZIP Structure Wrong
 
+Verify correct structure:
 ```bash
-# Verify ZIP structure
-unzip -l XSpoof-Magisk-v2.0.0.zip
+cd ~/projects/xps/magisk_module
+ls -la
 
 # Should show:
 # module.prop
-# common/system.prop
+# common/
 # post-fs-data.sh
 # service.sh
-# etc.
+# uninstall.sh
+# README.md
 ```
 
-## Quick Build Script
+## Complete Build Script (Automated)
 
 Save this as `~/build-xspoof.sh`:
 
@@ -282,22 +362,40 @@ set -e
 
 echo "🔨 Building XSpoof..."
 
+# Navigate to project
 cd ~/projects/xps
 
 # Update code
 echo "📡 Pulling latest changes..."
 git pull origin magisk-conversion
 
+# Setup gradlew if missing
+if [ ! -f gradlew ]; then
+    echo "⚙️ Creating gradlew..."
+    cat > gradlew << 'EOF'
+#!/bin/bash
+gradle "$@"
+EOF
+    chmod +x gradlew
+fi
+
 # Build APK
 echo "📦 Building APK..."
-./gradlew clean assembleRelease -x lint
+export JAVA_HOME=$PREFIX/opt/openjdk
+./gradlew clean assembleRelease -x lint --no-daemon
+
+# Check if build succeeded
+if [ ! -f app/build/outputs/apk/release/app-release.apk ]; then
+    echo "❌ APK build failed!"
+    exit 1
+fi
 
 # Create Magisk ZIP
 echo "📦 Creating Magisk module ZIP..."
 cd magisk_module
 zip -r ../XSpoof-Magisk-v2.0.0.zip \
     module.prop \
-    common/system.prop \
+    common/ \
     post-fs-data.sh \
     service.sh \
     uninstall.sh \
@@ -306,21 +404,28 @@ cd ..
 
 # Copy to Downloads
 echo "📱 Copying to Downloads..."
+mkdir -p ~/storage/downloads
 cp app/build/outputs/apk/release/app-release.apk ~/storage/downloads/XSpoof-v2.0.0.apk
 cp XSpoof-Magisk-v2.0.0.zip ~/storage/downloads/XSpoof-Magisk-v2.0.0.zip
 
+# Summary
+echo ""
 echo "✅ Build complete!"
-echo "📁 APK: ~/storage/downloads/XSpoof-v2.0.0.apk"
-echo "📁 Module: ~/storage/downloads/XSpoof-Magisk-v2.0.0.zip"
+echo "📁 Files ready in ~/storage/downloads/"
+echo ""
+ls -lah ~/storage/downloads/XSpoof*
+echo ""
+echo "📱 Next steps:"
+echo "1. Install XSpoof-v2.0.0.apk via file manager"
+echo "2. Install XSpoof-Magisk-v2.0.0.zip via Magisk Manager"
+echo "3. Reboot device"
 ```
 
-Make it executable:
+**Make it executable:**
 ```bash
 chmod +x ~/build-xspoof.sh
-```
 
-Run it:
-```bash
+# Run it:
 ~/build-xspoof.sh
 ```
 
@@ -334,52 +439,54 @@ Built APK:                ~/projects/xps/app/build/outputs/apk/release/app-relea
 Magisk ZIP:               ~/projects/xps/XSpoof-Magisk-v2.0.0.zip
 Downloaded (for install): ~/storage/downloads/XSpoof-*.apk
                           ~/storage/downloads/XSpoof-*.zip
-Downloads on device:      /sdcard/Download/
-```
-
-## Environment Variables Cheat Sheet
-
-```bash
-# Add these to ~/.bashrc for persistent setup
-export ANDROID_SDK_ROOT=$PREFIX/opt/android-sdk
-export ANDROID_HOME=$ANDROID_SDK_ROOT
-export PATH=$PATH:$ANDROID_SDK_ROOT/tools:$ANDROID_SDK_ROOT/platform-tools
-export GRADLE_OPTS="-Xmx512m"
-export JAVA_HOME=$PREFIX/opt/openjdk
+Device Downloads folder:  /sdcard/Download/
+Gradle cache:             ~/.gradle/
 ```
 
 ## Performance Tips
 
-- **Build on charger** - Building drains battery
-- **Use WiFi** - Downloads are faster
-- **Close other apps** - Frees up RAM for build process
-- **Build at night** - Keeps device cool
+- **Build on charger** - Prevents shutdown
+- **Close other apps** - Frees RAM
+- **Use WiFi** - Faster downloads
+- **Be patient** - First build takes 10-15 minutes
 
-## Updating the Source Code
-
-When you want to rebuild after updates:
+## Commands Cheat Sheet
 
 ```bash
-cd ~/projects/xps
-git pull origin magisk-conversion
-./gradlew clean assembleRelease -x lint
+# Setup (one-time)
+mkdir -p ~/projects && cd ~/projects
+git clone https://github.com/a1054800a-boss/xps.git
+cd xps && git checkout magisk-conversion
+
+# Create gradlew
+cat > gradlew << 'EOF'
+#!/bin/bash
+gradle "$@"
+EOF
+chmod +x gradlew
+
+# Build
+export JAVA_HOME=$PREFIX/opt/openjdk
+./gradlew assembleRelease -x lint --no-daemon
+
+# Create ZIP
+cd magisk_module && zip -r ../XSpoof-Magisk-v2.0.0.zip module.prop common/ post-fs-data.sh service.sh uninstall.sh README.md && cd ..
+
+# Copy
+cp app/build/outputs/apk/release/app-release.apk ~/storage/downloads/XSpoof-v2.0.0.apk
+cp XSpoof-Magisk-v2.0.0.zip ~/storage/downloads/XSpoof-Magisk-v2.0.0.zip
+
+# Verify
+ls ~/storage/downloads/XSpoof*
 ```
 
 ## Getting Help
 
-If build fails:
-1. **Check logs:** `cat build.log`
-2. **Clean everything:** `./gradlew clean`
-3. **Update tools:** `pkg upgrade`
-4. **Check disk space:** `df -h`
-5. **Check RAM:** `free -h`
+If something fails:
+1. **Read the error message** - It usually tells you what's wrong
+2. **Check logs:** `./gradlew assembleRelease --stacktrace`
+3. **Verify tools:** `java -version && gradle -version`
+4. **Check space:** `df -h` (need at least 2GB free)
+5. **Check RAM:** `free -h` (build needs ~512MB)
 
-## Alternative: Use Pre-built APK
-
-If building is too slow or fails, you can:
-
-1. **Download pre-built APK** from GitHub Releases
-2. **Just create the Magisk ZIP** (it's quick)
-3. **Install both files**
-
-Let me know if you need help with any step!
+Good luck! 🚀
