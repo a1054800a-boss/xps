@@ -1,0 +1,7 @@
+id=xspoof
+name=XSpoof Device Spoofer
+version=1.0
+versionCode=1
+author=XSpoof Dev
+description=Spoof Android device information (Build properties, Android ID, IP addresses)
+minMagisk=18000

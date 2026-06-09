@@ -1,0 +1,10 @@
+# Device Information Properties
+# These will be read and modified by post-fs-data.sh based on config
+# Placeholder values - actual values injected at runtime
+ro.build.fingerprint=google/oriole/oriole:12/S2B2.220816.016:user/release-keys
+ro.product.manufacturer=Google
+ro.product.model=Pixel 6
+ro.product.device=oriole
+ro.product.brand=google
+ro.product.hardware=oriole
+ro.build.product=oriole
