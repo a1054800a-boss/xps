@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">XSpoof</string>
+    <string name="module_enabled">Module Enabled</string>
+    <string name="spoof_all_apps">Spoof All Apps</string>
+    <string name="device_info">Device Information</string>
+    <string name="network_info">Network Information</string>
+    <string name="target_apps">Target Apps</string>
+</resources>

@@ -1,0 +1,19 @@
+// Magisk Module Build Configuration
+// This is a supplementary build file for packaging the Magisk module
+
+task createMagiskModule {
+    doLast {
+        // Create magisk module directory structure
+        def magiskDir = file('magisk_module')
+        magiskDir.mkdirs()
+
+        // Copy APK to module
+        copy {
+            from 'app/build/outputs/apk/release/app-release.apk'
+            into 'magisk_module'
+            rename 'app-release.apk', 'xspoof.apk'
+        }
+
+        println "Magisk module created in: $magiskDir"
+    }
+}
